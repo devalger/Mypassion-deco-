@@ -123,6 +123,56 @@
       max-width: 720px;
       margin: 0 auto;
     }
+    /* Hero cover image controls */
+    .hero.has-cover {
+      min-height: clamp(420px, 52vw, 610px);
+      display:flex; align-items:center; justify-content:flex-start;
+      text-align:right; padding:3.2rem clamp(1.4rem, 6vw, 5rem);
+      background-position:center; background-size:cover; background-repeat:no-repeat;
+    }
+    .hero.has-cover::before {
+      content:""; position:absolute; inset:0; z-index:0;
+      background:linear-gradient(270deg,rgba(251,247,244,.96) 0%,rgba(251,247,244,.82) 34%,rgba(251,247,244,.12) 78%,rgba(251,247,244,.04) 100%);
+      pointer-events:none;
+    }
+    .hero.has-cover .hero-glow { display:none; }
+    .hero.has-cover .hero-brand { max-width:520px; width:100%; }
+    .hero.has-cover .hero-logo { margin:0 0 1rem; }
+    .hero.has-cover .hero-subtitle { margin:0; }
+    .hero.has-cover .hero-owner { text-align:right; }
+    .hero.has-cover .hero-title { font-size:clamp(2rem,5vw,3.6rem); }
+    @media(max-width:600px) {
+      .hero.has-cover { min-height:470px; padding:2rem 1.2rem; align-items:flex-end; }
+      .hero.has-cover::before { background:linear-gradient(0deg,rgba(251,247,244,.97) 0%,rgba(251,247,244,.88) 38%,rgba(251,247,244,.15) 100%); }
+      .hero.has-cover .hero-brand { max-width:100%; }
+      .hero.has-cover .hero-logo { width:56px;height:56px; font-size:1rem; }
+      .hero.has-cover .hero-logo span { font-size:1.3rem; }
+    }
+    /* Alternative layout: three categories in one row, with All centered above the middle one */
+    .categories.layout-compact .cat-track {
+      grid-template-columns:repeat(3,minmax(0,1fr));
+      grid-template-rows:auto auto;
+      gap:.65rem;
+      align-items:stretch;
+    }
+    .categories.layout-compact .cat-btn[data-cat="all"] {
+      grid-column:2;
+      grid-row:1;
+      min-height:56px;
+      flex-direction:row;
+      gap:.65rem;
+      padding:.65rem 1rem;
+    }
+    .categories.layout-compact .cat-btn[data-cat="all"] .cat-icon { width:34px;height:34px;font-size:1rem; }
+    .categories.layout-compact .cat-btn[data-cat="parties"] { grid-column:3; grid-row:2; }
+    .categories.layout-compact .cat-btn[data-cat="favors"] { grid-column:2; grid-row:2; }
+    .categories.layout-compact .cat-btn[data-cat="gifts"] { grid-column:1; grid-row:2; }
+    @media(max-width:520px) {
+      .categories.layout-compact .cat-track { grid-template-columns:repeat(3,minmax(0,1fr)); gap:.4rem; }
+      .categories.layout-compact .cat-btn { min-height:94px; padding:.6rem .2rem; font-size:.72rem; border-radius:14px; }
+      .categories.layout-compact .cat-btn .cat-icon { width:36px;height:36px;font-size:1rem; }
+      .categories.layout-compact .cat-btn[data-cat="all"] { min-height:50px; }
+    }
     .categories-title {
       text-align: center;
       font-family: 'Playfair Display', serif;
@@ -549,6 +599,26 @@
       .admin-logo { width:100%; margin-bottom:.5rem; }
       .form-row { grid-template-columns:1fr; }
     }
+
+    /* Visual category layout picker in admin */
+    .category-layout-choices{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:10px}
+    .category-layout-choice{font:inherit;text-align:right;direction:rtl;cursor:pointer;color:var(--text,#4b302b);background:rgba(255,255,255,.72);border:2px solid rgba(122,62,50,.18);border-radius:16px;padding:12px;display:flex;flex-direction:column;gap:9px;min-width:0;transition:border-color .18s,box-shadow .18s,background .18s}
+    .category-layout-choice.is-selected{border-color:var(--accent,#8B3A2F);box-shadow:0 0 0 2px rgba(139,58,47,.12);background:#fffaf7}
+    .layout-choice-title{font-size:14px;font-weight:700;line-height:1.5}
+    .layout-preview{display:flex;flex-direction:column;gap:5px;padding:8px;background:#f4e8e2;border-radius:10px;min-height:112px;justify-content:center}
+    .layout-preview-grid{display:grid;grid-template-columns:1fr 1fr;grid-template-rows:repeat(2,1fr)}
+    .layout-mini-tile{display:flex;align-items:center;justify-content:center;flex-direction:column;gap:2px;min-height:34px;border-radius:7px;border:1px solid #dfc9c1;background:#fffdfb;font-size:16px;line-height:1.1;box-sizing:border-box}
+    .layout-mini-tile.layout-mini-all{background:#74392f;color:white;border-color:#74392f}
+    .layout-mini-tile small{font-size:9px;font-weight:600}
+    .layout-preview-row{align-items:center}
+    .layout-preview-row>.layout-mini-tile{width:42%;min-height:30px}
+    .layout-mini-row{width:100%;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px}
+    .layout-mini-row .layout-mini-tile{min-width:0;min-height:37px;font-size:13px}
+    .layout-choice-hint{font-size:11px;line-height:1.5;color:#826b64}
+    .layout-choice-selected{font-size:11px;font-weight:700;color:var(--accent,#8B3A2F);display:none}
+    .category-layout-choice.is-selected .layout-choice-selected{display:block}
+    @media(max-width:430px){.category-layout-choices{gap:8px}.category-layout-choice{padding:9px}.layout-choice-title{font-size:12px}.layout-preview{min-height:102px;padding:6px}.layout-choice-hint,.layout-choice-selected{font-size:10px}}
+
   </style>
 </head>
 <body>
@@ -721,9 +791,6 @@
         <div class="field"><label>كلمة المرور</label><input id="adminPassword" type="password" autocomplete="current-password"></div>
         <div class="admin-actions"><button class="pri" id="adminLoginBtn" type="button">دخول</button></div>
         <div class="admin-err" id="adminLoginError"></div>
-        <p class="admin-muted" style="margin-top:12px;font-size:.72rem">يجب إنشاء مستخدم من Authentication في Supabase. أو استخدمي الرمز السريع إن لم يُفعّل Auth بعد.</p>
-        <div class="field" style="margin-top:8px"><label>رمز سريع (اختياري)</label><input id="adminPin" type="password" placeholder="••••" autocomplete="off"></div>
-        <div class="admin-actions"><button class="sec" id="adminPinBtn" type="button">دخول بالرمز</button></div>
       </div>
     </div>
 
@@ -741,13 +808,13 @@
             <div class="admin-stat"><b id="statOrders">0</b><span>الطلبات</span></div>
             <div class="admin-stat"><b id="statProducts">0</b><span>المنتجات</span></div>
             <div class="admin-stat"><b id="statSubs">0</b><span>التصنيفات الفرعية</span></div>
-            <div class="admin-stat"><b id="statSource" style="font-size:1rem">محلي</b><span>مصدر البيانات</span></div>
+            <div class="admin-stat"><b id="statSource" style="font-size:1rem">محلي</b><span>حالة البيانات</span></div>
           </div>
           <div class="admin-card">
-            <h3>حالة الاتصال</h3>
+            <h3>حالة حفظ البيانات</h3>
             <div class="sync-status" id="syncStatus">جاري التحقق...</div>
             <div class="admin-actions" style="margin-top:10px">
-              <button class="sec" type="button" onclick="loadFromSupabase()">مزامنة من Supabase</button>
+              <button class="sec" type="button" onclick="loadFromSupabase()">تحديث البيانات</button>
             </div>
           </div>
         </section>
@@ -809,12 +876,51 @@
 
         <section class="admin-section" id="tab-settings">
           <div class="admin-card">
-            <h3>إعدادات المتجر</h3>
-            <p class="admin-muted">MyPassion Deco · سماح العلي · شغفي في كل لمسة · @mypassion_deco</p>
-            <p class="admin-muted">للجداول نفّذي ملف <code>supabase-setup.sql</code> في SQL Editor.</p>
+            <h3>صورة غلاف الموقع</h3>
+            <p class="admin-muted">اختاري صورة عريضة لتظهر خلف واجهة المتجر، أو ضعي رابط صورة مباشر.</p>
+            <div class="field"><label>رابط صورة الغلاف</label><input id="coverImageUrl" type="url" dir="ltr" placeholder="https://example.com/cover.jpg"></div>
+            <div class="field"><label>أو اختاري صورة من جهازك</label><input id="coverImageFile" type="file" accept="image/*"></div>
+            <div id="coverPreviewWrap" style="display:none;margin:10px 0"><img id="coverPreview" alt="معاينة الغلاف" style="display:block;width:100%;max-height:220px;object-fit:cover;border-radius:12px;border:1px solid rgba(255,255,255,.12)"></div>
             <div class="admin-actions">
-              <button class="sec" type="button" onclick="seedToSupabase()">رفع التصنيفات إلى Supabase</button>
+              <button class="pri" type="button" id="saveCoverBtn">حفظ الغلاف</button>
+              <button class="sec" type="button" id="removeCoverBtn">إزالة الغلاف</button>
             </div>
+            <div class="sync-status" id="coverStatus"></div>
+          </div>
+          <div class="admin-card">
+            <h3>شكل التصنيفات الرئيسية</h3>
+            <p class="admin-muted">اختاري طريقة عرض التصنيفات في واجهة المتجر.</p>
+            <div class="field"><label>اختاري الشكل من المعاينة</label>
+              <div class="category-layout-choices" id="categoryLayoutChoices">
+                <button type="button" class="category-layout-choice" data-layout-choice="cards" aria-pressed="false">
+                  <span class="layout-choice-title">الشكل الأول: شبكة 2×2</span>
+                  <span class="layout-preview layout-preview-grid" aria-hidden="true">
+                    <span class="layout-mini-tile">🎀</span><span class="layout-mini-tile layout-mini-all">✦<small>الكل</small></span>
+                    <span class="layout-mini-tile">🎁</span><span class="layout-mini-tile">💐</span>
+                  </span>
+                  <span class="layout-choice-hint">أربع بطاقات، اثنتان في كل صف</span>
+                  <span class="layout-choice-selected">✓ الشكل المختار</span>
+                </button>
+                <button type="button" class="category-layout-choice" data-layout-choice="compact" aria-pressed="false">
+                  <span class="layout-choice-title">الشكل الثاني: الكل بالأعلى</span>
+                  <span class="layout-preview layout-preview-row" aria-hidden="true">
+                    <span class="layout-mini-tile layout-mini-all">✦<small>الكل</small></span>
+                    <span class="layout-mini-row">
+                      <span class="layout-mini-tile">🎀</span><span class="layout-mini-tile">🎁</span><span class="layout-mini-tile">💐</span>
+                    </span>
+                  </span>
+                  <span class="layout-choice-hint">«الكل» فوق، والثلاثة في صف واحد</span>
+                  <span class="layout-choice-selected">✓ الشكل المختار</span>
+                </button>
+              </div>
+              <select id="categoryLayoutSelect" aria-label="طريقة عرض التصنيفات" style="display:none"><option value="cards">الشكل الأول</option><option value="compact">الشكل الثاني</option></select>
+            </div>
+            <div class="admin-actions"><button class="pri" type="button" id="saveCategoryLayoutBtn">حفظ شكل التصنيفات</button></div>
+            <div class="sync-status" id="categoryLayoutStatus"></div>
+          </div>
+          <div class="admin-card">
+            <h3>إعدادات البيانات</h3>
+            <p class="admin-muted">MyPassion Deco · سماح العلي · شغفي في كل لمسة · @mypassion_deco</p>
             <div class="sync-status" id="settingsSync"></div>
           </div>
         </section>
@@ -830,7 +936,6 @@
     const SB_URL = SUPABASE_URL + '/rest/v1';
     const SB_KEY = 'sb_publishable_WfBt9JqCAmuDaH6qDZjyYw_rUOn4zgb';
     const BUCKET = 'product-images';
-    const ADMIN_PIN = 'mypassion2026'; // رمز سريع مؤقت — غيّريه لاحقاً
     let accessToken = localStorage.getItem('mpd_admin_token') || '';
     let refreshToken = localStorage.getItem('mpd_admin_refresh') || '';
     const SB_HEADERS = {
@@ -872,7 +977,7 @@
           }
         } catch (_) {}
       }
-      return !!localStorage.getItem('mpd_admin_pin_ok');
+      return false;
     }
 
     let useSupabase = false;
@@ -1017,9 +1122,9 @@
         const res = await sbFetch('/products?select=id&limit=1');
         if (res.ok) {
           useSupabase = true;
-          dataSource = 'Supabase';
+          dataSource = 'سحابي';
           if (el) {
-            el.textContent = '✓ متصل بـ Supabase — المنتجات والطلبات تُحفظ في السحابة';
+            el.textContent = '✓ تم الاتصال وحفظ البيانات السحابية';
             el.className = 'sync-status ok';
           }
           await loadFromSupabase(true);
@@ -1052,12 +1157,12 @@
           updateDash();
           return true;
         }
-        let msg = 'الجداول غير موجودة في Supabase.';
+        let msg = 'تعذر تحميل بيانات المتجر.';
         try {
           const body = await res.json();
           if (body && body.message) msg += ' (' + body.message + ')';
         } catch (_) {}
-        msg += ' نفّذي ملف supabase-setup.sql من مجلد المشروع في SQL Editor.';
+
         if (el) {
           el.textContent = msg;
           el.className = 'sync-status err';
@@ -1068,7 +1173,7 @@
         return false;
       } catch (e) {
         if (el) {
-          el.textContent = 'تعذّر الاتصال بـ Supabase — العمل بالوضع المحلي. تحققي من الإنترنت والمفتاح.';
+          el.textContent = 'تعذر الاتصال بالخدمة السحابية؛ يجري استخدام البيانات المحلية مؤقتًا.';
           el.className = 'sync-status err';
         }
         useSupabase = false;
@@ -1096,7 +1201,7 @@
               images: Array.isArray(r.images) ? r.images : (r.images ? [r.images] : [])
             }));
             useSupabase = true;
-            dataSource = 'Supabase';
+            dataSource = 'سحابي';
           }
         }
         if (sr.ok) {
@@ -1116,9 +1221,9 @@
         renderAdminProducts();
         renderAdminSubs();
         updateDash();
-        if (!silent) showToast('تمت المزامنة من Supabase');
+        if (!silent) showToast('تم تحديث بيانات المتجر');
       } catch (e) {
-        if (!silent) showToast('فشل التحميل من Supabase');
+        if (!silent) showToast('تعذر تحديث بيانات المتجر');
       }
     }
 
@@ -1179,7 +1284,7 @@
         el.textContent = 'تم الرفع (أو تخطي الموجود). افحصي الجداول في Supabase.';
         el.className = 'sync-status ok';
         useSupabase = true;
-        dataSource = 'Supabase';
+        dataSource = 'سحابي';
         updateDash();
       } catch (e) {
         el.textContent = 'فشل الرفع — تأكدي من إنشاء الجداول وسياسات الكتابة.';
@@ -1659,7 +1764,7 @@
       room.classList.add('open');
       room.setAttribute('aria-hidden', 'false');
       document.body.classList.add('admin-open');
-      if ((accessToken && !tokenExpired(accessToken)) || localStorage.getItem('mpd_admin_pin_ok')) {
+      if (accessToken && !tokenExpired(accessToken)) {
         showAdminPanelView();
       } else {
         showAdminLoginView();
@@ -1914,6 +2019,106 @@
       showToast('تم الحذف');
     }
 
+    // ========== STORE APPEARANCE SETTINGS ==========
+    function applyCoverImage(url) {
+      const hero = document.querySelector('.hero');
+      if (!hero) return;
+      const clean = (url || '').trim();
+      if (clean) {
+        hero.classList.add('has-cover');
+        hero.style.backgroundImage = 'url("' + clean.replace(/["\\]/g, '') + '")';
+      } else {
+        hero.classList.remove('has-cover');
+        hero.style.backgroundImage = '';
+      }
+    }
+    function applyCategoryLayout(layout) {
+      const section = document.querySelector('.categories');
+      if (!section) return;
+      section.classList.toggle('layout-compact', layout === 'compact');
+      const normalized = layout === 'compact' ? 'compact' : 'cards';
+      const select = document.getElementById('categoryLayoutSelect');
+      if (select) select.value = normalized;
+      document.querySelectorAll('[data-layout-choice]').forEach(button => {
+        const selected = button.dataset.layoutChoice === normalized;
+        button.classList.toggle('is-selected', selected);
+        button.setAttribute('aria-pressed', selected ? 'true' : 'false');
+      });
+    }
+    function initAppearanceSettings() {
+      const cover = localStorage.getItem('mpd_cover_image') || '';
+      const urlInput = document.getElementById('coverImageUrl');
+      if (urlInput && cover && /^https?:/i.test(cover)) urlInput.value = cover;
+      applyCoverImage(cover);
+      applyCategoryLayout(localStorage.getItem('mpd_category_layout') || 'cards');
+      const fileInput = document.getElementById('coverImageFile');
+      if (fileInput) fileInput.addEventListener('change', () => {
+        const f = fileInput.files && fileInput.files[0];
+        if (!f) return;
+        if (!f.type.startsWith('image/')) { showToast('اختاري ملف صورة فقط'); fileInput.value=''; return; }
+        if (f.size > 5 * 1024 * 1024) { showToast('حجم صورة الغلاف يجب أن يكون أقل من 5 ميغابايت'); fileInput.value=''; return; }
+        const reader = new FileReader();
+        reader.onload = () => {
+          const preview = document.getElementById('coverPreview');
+          const wrap = document.getElementById('coverPreviewWrap');
+          preview.src = reader.result; wrap.style.display = 'block';
+          // Keep the selected image temporarily until Save is pressed.
+          fileInput.dataset.dataUrl = reader.result;
+        };
+        reader.readAsDataURL(f);
+      });
+      const saveCover = document.getElementById('saveCoverBtn');
+      if (saveCover) saveCover.onclick = () => {
+        const status = document.getElementById('coverStatus');
+        const file = document.getElementById('coverImageFile');
+        const typedUrl = (document.getElementById('coverImageUrl').value || '').trim();
+        const dataUrl = file && file.dataset.dataUrl;
+        const value = dataUrl || typedUrl;
+        if (!value) { status.textContent='اختاري صورة أو أدخلي رابطها أولاً.'; status.className='sync-status err'; return; }
+        try {
+          localStorage.setItem('mpd_cover_image', value);
+          applyCoverImage(value);
+          status.textContent = dataUrl ? 'تم حفظ الغلاف على هذا الجهاز. للحصول على نفس الغلاف على أجهزة الزوار، استخدمي رابط صورة منشور.' : 'تم حفظ الغلاف وتطبيقه.';
+          status.className='sync-status ok';
+          if (file) { file.value=''; delete file.dataset.dataUrl; }
+          showToast('تم حفظ صورة الغلاف');
+        } catch (e) {
+          status.textContent='تعذر حفظ الصورة؛ حجمها كبير للتخزين المحلي. استخدمي رابط صورة مباشر.';
+          status.className='sync-status err';
+        }
+      };
+      const removeCover = document.getElementById('removeCoverBtn');
+      if (removeCover) removeCover.onclick = () => {
+        localStorage.removeItem('mpd_cover_image');
+        document.getElementById('coverImageUrl').value='';
+        document.getElementById('coverImageFile').value='';
+        delete document.getElementById('coverImageFile').dataset.dataUrl;
+        document.getElementById('coverPreviewWrap').style.display='none';
+        applyCoverImage('');
+        const status=document.getElementById('coverStatus'); status.textContent='تمت إزالة صورة الغلاف.'; status.className='sync-status ok';
+      };
+      document.querySelectorAll('[data-layout-choice]').forEach(button => {
+        button.addEventListener('click', () => {
+          const select = document.getElementById('categoryLayoutSelect');
+          if (select) select.value = button.dataset.layoutChoice;
+          document.querySelectorAll('[data-layout-choice]').forEach(other => {
+            const selected = other === button;
+            other.classList.toggle('is-selected', selected);
+            other.setAttribute('aria-pressed', selected ? 'true' : 'false');
+          });
+        });
+      });
+      const layoutBtn = document.getElementById('saveCategoryLayoutBtn');
+      if (layoutBtn) layoutBtn.onclick = () => {
+        const layout = document.getElementById('categoryLayoutSelect').value;
+        localStorage.setItem('mpd_category_layout', layout);
+        applyCategoryLayout(layout);
+        const status = document.getElementById('categoryLayoutStatus');
+        status.textContent = 'تم حفظ شكل التصنيفات.'; status.className='sync-status ok';
+        showToast('تم تحديث شكل التصنيفات');
+      };
+    }
+
     // wire admin UI once DOM ready
     function wireAdminUI() {
       const openBtn = document.getElementById('adminOpen');
@@ -1926,7 +2131,6 @@
         refreshToken = '';
         localStorage.removeItem('mpd_admin_token');
         localStorage.removeItem('mpd_admin_refresh');
-        localStorage.removeItem('mpd_admin_pin_ok');
         showAdminLoginView();
       };
       document.querySelectorAll('.admin-tab').forEach(tab => {
@@ -1950,22 +2154,9 @@
           refreshToken = d.refresh_token || '';
           localStorage.setItem('mpd_admin_token', accessToken);
           if (refreshToken) localStorage.setItem('mpd_admin_refresh', refreshToken);
-          localStorage.setItem('mpd_admin_pin_ok', '1');
           showAdminPanelView();
         } catch (ex) {
           err.textContent = ex.message;
-        }
-      };
-      const pinBtn = document.getElementById('adminPinBtn');
-      if (pinBtn) pinBtn.onclick = () => {
-        const pin = document.getElementById('adminPin').value;
-        const err = document.getElementById('adminLoginError');
-        if (pin === ADMIN_PIN) {
-          localStorage.setItem('mpd_admin_pin_ok', '1');
-          err.textContent = '';
-          showAdminPanelView();
-        } else {
-          err.textContent = 'رمز غير صحيح';
         }
       };
       const saveBtn = document.getElementById('saveProductBtn');
@@ -1988,6 +2179,7 @@
 
     if (location.hash === '#admin') openAdmin();
     wireAdminUI();
+    initAppearanceSettings();
 
     function initCatIndicator() { /* icon cards — no sliding indicator */ }
 
