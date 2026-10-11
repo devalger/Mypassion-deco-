@@ -808,13 +808,13 @@
             <div class="admin-stat"><b id="statOrders">0</b><span>الطلبات</span></div>
             <div class="admin-stat"><b id="statProducts">0</b><span>المنتجات</span></div>
             <div class="admin-stat"><b id="statSubs">0</b><span>التصنيفات الفرعية</span></div>
-            <div class="admin-stat"><b id="statSource" style="font-size:1rem">محلي</b><span>حالة البيانات</span></div>
+            <div class="admin-stat"><b id="statSource" style="font-size:1rem">—</b><span>حالة الاتصال</span></div>
           </div>
           <div class="admin-card">
-            <h3>حالة حفظ البيانات</h3>
-            <div class="sync-status" id="syncStatus">جاري التحقق...</div>
+            <h3>حالة الاتصال بـ Supabase</h3>
+            <div class="sync-status" id="syncStatus">جاري الاتصال...</div>
             <div class="admin-actions" style="margin-top:10px">
-              <button class="sec" type="button" onclick="loadFromSupabase()">تحديث البيانات</button>
+              <button class="sec" type="button" onclick="loadFromSupabase()">تحديث من السحابة</button>
             </div>
           </div>
         </section>
@@ -826,6 +826,11 @@
               <input type="checkbox" id="orderGroupByWilaya" onchange="renderAdminOrders()" /> تجميع حسب الولاية
             </label>
             <button class="admin-tab" type="button" onclick="renderAdminOrders()" style="background:rgba(139,58,47,.2)">تحديث</button>
+            <button class="admin-tab" type="button" onclick="selectVisibleOrders(true)">تحديد الظاهرة</button>
+            <button class="admin-tab" type="button" onclick="selectVisibleOrders(false)">إلغاء التحديد</button>
+            <button class="admin-tab" type="button" onclick="startBulkWhatsApp()" style="background:#187c55;color:white">رسائل واتساب للمحددة</button>
+            <button class="admin-tab" type="button" id="nextBulkWhatsAppBtn" onclick="sendNextBulkWhatsApp()" style="display:none;background:#236d9b;color:white">فتح الرسالة التالية</button>
+            <span id="bulkWhatsAppStatus" class="admin-muted" aria-live="polite"></span>
           </div>
           <div id="ordersContainer"></div>
         </section>
@@ -875,6 +880,13 @@
         </section>
 
         <section class="admin-section" id="tab-settings">
+          <div class="admin-card">
+            <h3>إعدادات واتساب للطلبات</h3>
+            <p class="admin-muted">حددي رقم واتساب الذي يستقبل طلبات الزبائن. أدخلي الرقم الدولي دون علامة +، مثل 213555123456. سيُفتح واتساب برسالة جاهزة ولا تُرسل الرسالة إلا بعد ضغط زر الإرسال داخله.</p>
+            <div class="field"><label for="adminWhatsAppPhone">رقم واتساب استقبال الطلبات</label><input id="adminWhatsAppPhone" type="tel" dir="ltr" placeholder="2135XXXXXXXX"></div>
+            <div class="admin-actions"><button class="pri" type="button" id="saveWhatsAppPhoneBtn">حفظ رقم واتساب</button><button class="sec" type="button" id="reloadWhatsAppPhoneBtn">إعادة تحميل الرقم</button></div>
+            <div class="sync-status" id="whatsAppPhoneStatus"></div>
+          </div>
           <div class="admin-card">
             <h3>صورة غلاف الموقع</h3>
             <p class="admin-muted">اختاري صورة عريضة لتظهر خلف واجهة المتجر، أو ضعي رابط صورة مباشر.</p>
@@ -980,10 +992,10 @@
       return false;
     }
 
-    let useSupabase = false;
-    let dataSource = 'محلي';
+    let dataSource = '—';
+    let storeReady = false;
 
-    // ========== DEFAULT DATA (no سورة الكهف) ==========
+    // تصنيفات افتراضية تُستخدم فقط إن كانت جداول السحابة فارغة لأول مرة
     const DEFAULT_SUBS = {
       parties: [
         { id: 'newborn', label: 'استقبال مواليد' },
@@ -1073,6 +1085,9 @@
     ];
 
     let ORDERS = [];
+    let ADMIN_WA_PHONE = '';
+    let bulkWhatsAppQueue = [];
+    let bulkWhatsAppIndex = 0;
 
     let SUBCATS = JSON.parse(JSON.stringify(DEFAULT_SUBS));
     let PRODUCTS = JSON.parse(JSON.stringify(DEFAULT_PRODUCTS));
@@ -1084,100 +1099,209 @@
     let detailImgIndex = 0;
     let nextId = 100;
 
-    // ========== STORAGE ==========
-    function saveLocal() {
+    // ========== SUPABASE API (متوافق مع products.images من النوع text[] و orders.items من النوع jsonb) ==========
+    async function sbFetch(path, opts = {}) {
+      const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+      const timer = controller ? setTimeout(() => controller.abort(), 15000) : null;
       try {
-        localStorage.setItem('mpd_products', JSON.stringify(PRODUCTS));
-        localStorage.setItem('mpd_subs', JSON.stringify(SUBCATS));
-        localStorage.setItem('mpd_orders', JSON.stringify(ORDERS));
-      } catch(e) {}
-    }
-    function loadLocal() {
-      try {
-        const p = localStorage.getItem('mpd_products');
-        const s = localStorage.getItem('mpd_subs');
-        const o = localStorage.getItem('mpd_orders');
-        if (p) PRODUCTS = JSON.parse(p);
-        if (s) {
-          SUBCATS = JSON.parse(s);
-          if (SUBCATS.favors) SUBCATS.favors = SUBCATS.favors.filter(x => x.id !== 'kahf');
-        }
-        if (o) ORDERS = JSON.parse(o);
-        if (p) dataSource = 'محلي (محفوظ)';
-      } catch(e) {}
+        const res = await fetch(SB_URL + path, {
+          ...opts,
+          signal: controller ? controller.signal : undefined,
+          headers: { ...apiHeaders(), ...(opts.headers || {}) }
+        });
+        return res;
+      } finally {
+        if (timer) clearTimeout(timer);
+      }
     }
 
-    // ========== SUPABASE API ==========
-    async function sbFetch(path, opts = {}) {
-      const res = await fetch(SB_URL + path, {
-        ...opts,
-        headers: { ...apiHeaders(), ...(opts.headers || {}) }
-      });
-      return res;
+    async function sbFetchRetry(path, opts = {}, attempts = 3) {
+      let lastErr = null;
+      for (let i = 0; i < attempts; i++) {
+        try {
+          const res = await sbFetch(path, opts);
+          if (res.ok) return res;
+          if (res.status >= 400 && res.status < 500 && res.status !== 429) return res;
+          lastErr = new Error('HTTP ' + res.status);
+        } catch (e) {
+          lastErr = e;
+        }
+        await new Promise(r => setTimeout(r, 500 * (i + 1)));
+      }
+      if (lastErr) throw lastErr;
+      return null;
+    }
+
+    // products.images في قاعدة البيانات هو PostgreSQL text[] وليس jsonb.
+    // نتعامل معه دائمًا داخل JavaScript كمصفوفة روابط نصية.
+    function normalizeImageUrls(value) {
+      if (Array.isArray(value)) {
+        return value.map(x => typeof x === 'string' ? x : (x && (x.url || x.image_url || x.src)) || '')
+          .map(x => String(x).trim()).filter(Boolean);
+      }
+      if (typeof value === 'string' && value.trim()) {
+        const raw = value.trim();
+        try {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed)) return normalizeImageUrls(parsed);
+        } catch (_) {}
+        // دعم قيمة مفردة قديمة؛ لا نحاول تقسيم PostgreSQL array literal يدويًا
+        // لأن الروابط قد تحتوي على فواصل أو محارف خاصة.
+        return [raw];
+      }
+      return [];
+    }
+
+    function mapProductRows(rows) {
+      return (Array.isArray(rows) ? rows : []).map(r => {
+        // Supabase/PostgREST يعيد text[] عادةً كمصفوفة JSON من روابط الصور.
+        let images = normalizeImageUrls(r.images);
+        if (!images.length && r.image_url) images = [String(r.image_url)];
+        const category = String(r.cat ?? r.category ?? r.category_id ?? 'all');
+        const catAliases = {
+          parties: 'parties', favors: 'favors', gifts: 'gifts',
+          'ديكور حفلات': 'parties', 'ديكور الحفلات': 'parties',
+          'توزيعات': 'favors', 'تنسيق وهدايا': 'gifts',
+          party: 'parties', decoration: 'parties', favors: 'favors', gifts: 'gifts'
+        };
+        return {
+          id: r.id,
+          name: r.name || r.title || '',
+          cat: catAliases[category] || category,
+          sub: r.sub ?? r.subcategory_id ?? '',
+          price: Number(r.price ?? r.sale_price ?? 0),
+          desc: r.description || r.desc || '',
+          images
+        };
+      }).filter(p => p && p.name && Number.isFinite(p.price));
+    }
+
+    function mapOrderRows(rows) {
+      return (rows || []).map(r => ({
+        id: r.id,
+        createdAt: r.created_at,
+        customerName: r.customer_name,
+        phone: r.phone,
+        eventDate: r.event_date,
+        wilayaCode: r.wilaya_code,
+        wilayaName: r.wilaya_name,
+        address: r.address || '',
+        deliveryType: r.delivery_type,
+        deliveryFee: Number(r.delivery_fee || 0),
+        subtotal: Number(r.subtotal || 0),
+        total: Number(r.total || 0),
+        status: r.status || 'جديد',
+        items: r.items || []
+      }));
+    }
+
+    async function loadOrdersFromSupabase() {
+      try {
+        const or = await sbFetchRetry('/orders?select=*&order=created_at.desc', {}, 2);
+        if (or && or.ok) {
+          const rows = await or.json();
+          ORDERS = Array.isArray(rows) ? mapOrderRows(rows) : [];
+          return true;
+        }
+      } catch (_) {}
+      return false;
+    }
+
+    function normalizeWhatsAppPhone(value) {
+      let digits = String(value || '').replace(/\D/g, '');
+      if (digits.startsWith('00')) digits = digits.slice(2);
+      // Algeria local mobile/landline format: 0XXXXXXXXX -> 213XXXXXXXXX
+      if (digits.startsWith('0')) digits = '213' + digits.slice(1);
+      return digits;
+    }
+
+    async function loadWhatsAppSetting() {
+      const status = document.getElementById('whatsAppPhoneStatus');
+      try {
+        const res = await sbFetch('/site_settings?key=eq.whatsapp_phone&select=value&limit=1', { headers: { 'Authorization': 'Bearer ' + SB_KEY } });
+        if (!res || !res.ok) throw new Error('تعذر قراءة إعدادات واتساب. تأكدي من تشغيل SQL الإضافي.');
+        const rows = await res.json();
+        ADMIN_WA_PHONE = normalizeWhatsAppPhone(rows && rows[0] ? rows[0].value : '');
+        const input = document.getElementById('adminWhatsAppPhone');
+        if (input) input.value = ADMIN_WA_PHONE;
+        if (status) { status.textContent = ADMIN_WA_PHONE ? 'تم تحميل رقم واتساب من قاعدة البيانات.' : 'لم يتم تحديد رقم واتساب بعد.'; status.className = 'sync-status ' + (ADMIN_WA_PHONE ? 'ok' : ''); }
+        return true;
+      } catch (e) {
+        if (status) { status.textContent = e.message || 'تعذر تحميل رقم واتساب.'; status.className = 'sync-status err'; }
+        return false;
+      }
+    }
+
+    async function saveWhatsAppSetting() {
+      const input = document.getElementById('adminWhatsAppPhone');
+      const status = document.getElementById('whatsAppPhoneStatus');
+      const phone = normalizeWhatsAppPhone(input ? input.value : '');
+      if (!phone || phone.length < 10 || phone.length > 15) {
+        if (status) { status.textContent = 'أدخلي رقمًا صحيحًا بالصيغة الدولية، مثال 213555123456.'; status.className = 'sync-status err'; }
+        return;
+      }
+      try {
+        const res = await sbFetch('/site_settings?on_conflict=key', {
+          method: 'POST',
+          headers: { 'Authorization': 'Bearer ' + (accessToken || SB_KEY), 'Prefer': 'resolution=merge-duplicates,return=minimal' },
+          body: JSON.stringify({ key: 'whatsapp_phone', value: phone })
+        });
+        if (!res || !res.ok) {
+          let detail = ''; try { const j = await res.json(); detail = j.message || j.details || ''; } catch (_) {}
+          throw new Error(detail || 'تعذر حفظ الرقم. تأكدي من تسجيل الدخول كمديرة وتشغيل SQL الإضافي.');
+        }
+        ADMIN_WA_PHONE = phone;
+        if (status) { status.textContent = 'تم حفظ رقم واتساب على Supabase، وسيستخدمه الموقع على الأجهزة الأخرى.'; status.className = 'sync-status ok'; }
+        showToast('تم حفظ رقم واتساب');
+      } catch (e) {
+        if (status) { status.textContent = e.message || 'فشل حفظ رقم واتساب.'; status.className = 'sync-status err'; }
+      }
     }
 
     async function checkSupabase() {
       const el = document.getElementById('syncStatus');
       try {
-        const res = await sbFetch('/products?select=id&limit=1');
-        if (res.ok) {
-          useSupabase = true;
-          dataSource = 'سحابي';
+        if (el) {
+          el.textContent = 'جاري الاتصال بـ Supabase...';
+          el.className = 'sync-status';
+        }
+        const res = await sbFetchRetry('/products?select=id&limit=1', { headers: { 'Authorization': 'Bearer ' + SB_KEY } });
+        if (res && res.ok) {
+          dataSource = 'متصل';
+          await loadFromSupabase(true);
+          await loadOrdersFromSupabase();
+          await loadWhatsAppSetting();
+          storeReady = true;
           if (el) {
-            el.textContent = '✓ تم الاتصال وحفظ البيانات السحابية';
+            el.textContent = '✓ متصل بـ Supabase — ' + PRODUCTS.length + ' منتج · ' + ORDERS.length + ' طلب';
             el.className = 'sync-status ok';
           }
-          await loadFromSupabase(true);
-          // also try load orders
-          try {
-            const or = await sbFetch('/orders?select=*&order=created_at.desc');
-            if (or.ok) {
-              const rows = await or.json();
-              if (rows.length) {
-                ORDERS = rows.map(r => ({
-                  id: r.id,
-                  createdAt: r.created_at,
-                  customerName: r.customer_name,
-                  phone: r.phone,
-                  eventDate: r.event_date,
-                  wilayaCode: r.wilaya_code,
-                  wilayaName: r.wilaya_name,
-                  address: r.address || '',
-                  deliveryType: r.delivery_type,
-                  deliveryFee: Number(r.delivery_fee || 0),
-                  subtotal: Number(r.subtotal || 0),
-                  total: Number(r.total || 0),
-                  status: r.status || 'جديد',
-                  items: r.items || []
-                }));
-                saveLocal();
-              }
-            }
-          } catch (_) {}
           updateDash();
+          renderProducts();
           return true;
         }
-        let msg = 'تعذر تحميل بيانات المتجر.';
+        let msg = 'تعذر الاتصال بـ Supabase.';
         try {
-          const body = await res.json();
-          if (body && body.message) msg += ' (' + body.message + ')';
+          if (res) {
+            const body = await res.json();
+            if (body && body.message) msg += ' (' + body.message + ')';
+          }
         } catch (_) {}
-
-        if (el) {
-          el.textContent = msg;
-          el.className = 'sync-status err';
-        }
-        useSupabase = false;
-        dataSource = 'محلي';
+        dataSource = 'غير متصل';
+        storeReady = false;
+        if (el) { el.textContent = msg; el.className = 'sync-status err'; }
         updateDash();
+        renderProducts();
         return false;
       } catch (e) {
+        dataSource = 'غير متصل';
+        storeReady = false;
         if (el) {
-          el.textContent = 'تعذر الاتصال بالخدمة السحابية؛ يجري استخدام البيانات المحلية مؤقتًا.';
+          el.textContent = 'تعذر الاتصال بـ Supabase. تحققي من الإنترنت وإعدادات المشروع.';
           el.className = 'sync-status err';
         }
-        useSupabase = false;
         updateDash();
+        renderProducts();
         return false;
       }
     }
@@ -1185,52 +1309,53 @@
     async function loadFromSupabase(silent) {
       try {
         const [pr, sr] = await Promise.all([
-          sbFetch('/products?select=*&order=id'),
-          sbFetch('/subcategories?select=*&order=id')
+          sbFetchRetry('/products?select=*&order=id', { headers: { 'Authorization': 'Bearer ' + SB_KEY } }),
+          sbFetchRetry('/subcategories?select=*&order=id', {}, 2)
         ]);
-        if (pr.ok) {
-          const rows = await pr.json();
-          if (rows.length) {
-            PRODUCTS = rows.map(r => ({
-              id: r.id,
-              name: r.name,
-              cat: r.cat,
-              sub: r.sub,
-              price: Number(r.price),
-              desc: r.description || '',
-              images: Array.isArray(r.images) ? r.images : (r.images ? [r.images] : [])
-            }));
-            useSupabase = true;
-            dataSource = 'سحابي';
-          }
+        if (!(pr && pr.ok)) {
+          let detail = 'تعذر تحميل المنتجات من قاعدة البيانات';
+          try { const body = await pr.json(); if (body && (body.message || body.details)) detail += ': ' + (body.message || body.details); } catch (_) {}
+          if (!silent) showToast(detail);
+          const empty = document.getElementById('emptyState');
+          if (empty) { empty.textContent = detail + '؛ تحققي من صلاحية القراءة العامة (RLS) وجدول products.'; empty.classList.add('show'); }
+          dataSource = 'خطأ تحميل';
+          return false;
         }
-        if (sr.ok) {
-          const rows = await sr.json();
-          if (rows.length) {
-            const map = { parties:[], favors:[], gifts:[] };
-            rows.forEach(r => {
+        const rows = await pr.json();
+        PRODUCTS = Array.isArray(rows) ? mapProductRows(rows) : [];
+        dataSource = 'متصل';
+        storeReady = true;
+
+        if (sr && sr.ok) {
+          const subRows = await sr.json();
+          if (Array.isArray(subRows) && subRows.length) {
+            const map = { parties: [], favors: [], gifts: [] };
+            subRows.forEach(r => {
               if (map[r.parent]) map[r.parent].push({ id: r.id, label: r.label });
             });
-            // filter kahf just in case
             if (map.favors) map.favors = map.favors.filter(x => x.id !== 'kahf');
             SUBCATS = map;
           }
         }
-        saveLocal();
+
+        nextId = Math.max(100, ...(PRODUCTS.map(p => Number(p.id) || 0).concat([0]))) + 1;
         renderProducts();
-        renderAdminProducts();
-        renderAdminSubs();
+        if (typeof refreshAdminList === 'function') refreshAdminList();
+        if (typeof renderAdminSubs === 'function') renderAdminSubs();
         updateDash();
-        if (!silent) showToast('تم تحديث بيانات المتجر');
+        if (!silent) showToast('تم التحديث من Supabase (' + PRODUCTS.length + ' منتج)');
+        return true;
       } catch (e) {
-        if (!silent) showToast('تعذر تحديث بيانات المتجر');
+        dataSource = 'خطأ تحميل';
+        if (!silent) showToast('تعذر تحديث البيانات من Supabase');
+        return false;
       }
     }
 
     async function sbInsertProduct(p) {
       const body = {
         name: p.name, cat: p.cat, sub: p.sub, price: p.price,
-        description: p.desc, images: p.images
+        description: p.desc, images: normalizeImageUrls(p.images)
       };
       const res = await sbFetch('/products', { method: 'POST', body: JSON.stringify(body) });
       if (res.ok) {
@@ -1243,7 +1368,7 @@
     async function sbUpdateProduct(id, p) {
       const body = {
         name: p.name, cat: p.cat, sub: p.sub, price: p.price,
-        description: p.desc, images: p.images
+        description: p.desc, images: normalizeImageUrls(p.images)
       };
       const res = await sbFetch('/products?id=eq.' + id, { method: 'PATCH', body: JSON.stringify(body) });
       return res.ok;
@@ -1267,27 +1392,23 @@
 
     async function seedToSupabase() {
       const el = document.getElementById('settingsSync');
-      el.textContent = 'جاري الرفع...';
+      if (!el) return;
+      el.textContent = 'جاري رفع التصنيفات الافتراضية إلى Supabase...';
       el.className = 'sync-status';
       try {
-        // seed subs
         const flat = [];
-        Object.keys(SUBCATS).forEach(parent => {
-          SUBCATS[parent].forEach(s => flat.push({ id: s.id, parent, label: s.label }));
+        Object.keys(DEFAULT_SUBS).forEach(parent => {
+          DEFAULT_SUBS[parent].forEach(s => flat.push({ id: s.id, parent, label: s.label }));
         });
         for (const s of flat) {
           await sbInsertSub(s);
         }
-        for (const p of PRODUCTS) {
-          await sbInsertProduct(p);
-        }
-        el.textContent = 'تم الرفع (أو تخطي الموجود). افحصي الجداول في Supabase.';
+        await loadFromSupabase(true);
+        el.textContent = 'تم — افحصي جدول subcategories في Supabase.';
         el.className = 'sync-status ok';
-        useSupabase = true;
-        dataSource = 'سحابي';
         updateDash();
       } catch (e) {
-        el.textContent = 'فشل الرفع — تأكدي من إنشاء الجداول وسياسات الكتابة.';
+        el.textContent = 'فشل الرفع — تأكدي من إنشاء الجداول وسياسات الكتابة (RLS).';
         el.className = 'sync-status err';
       }
     }
@@ -1295,13 +1416,14 @@
     // ========== RENDER STORE ==========
     function createSparkles() {
       const c = document.getElementById('sparkles');
-      for (let i = 0; i < 16; i++) {
+      if (!c) return;
+      for (let i = 0; i < 6; i++) {
         const s = document.createElement('div');
         s.className = 'sparkle';
         s.style.left = Math.random()*100+'%';
-        s.style.animationDelay = Math.random()*12+'s';
-        s.style.animationDuration = (10+Math.random()*8)+'s';
-        s.style.width = s.style.height = (3+Math.random()*3)+'px';
+        s.style.animationDelay = Math.random()*14+'s';
+        s.style.animationDuration = (14+Math.random()*8)+'s';
+        s.style.width = s.style.height = (2+Math.random()*2)+'px';
         c.appendChild(s);
       }
     }
@@ -1343,15 +1465,25 @@
       let filtered = PRODUCTS;
       if (currentCat !== 'all') filtered = filtered.filter(p => p.cat === currentCat);
       if (currentSub) filtered = filtered.filter(p => p.sub === currentSub);
-      if (!filtered.length) { grid.innerHTML=''; empty.classList.add('show'); return; }
+      if (!filtered.length) {
+        grid.innerHTML = '';
+        if (dataSource === 'غير متصل' || dataSource === 'خطأ تحميل') {
+          empty.textContent = 'تعذر تحميل المنتجات من السحابة. حدّثي الصفحة بعد التأكد من الإنترنت.';
+        } else if (!storeReady) {
+          empty.textContent = 'جاري تحميل المنتجات...';
+        } else {
+          empty.textContent = 'لا توجد منتجات في هذا التصنيف حالياً';
+        }
+        empty.classList.add('show');
+        return;
+      }
       empty.classList.remove('show');
-      grid.innerHTML = filtered.map((p, idx) => {
+      grid.innerHTML = filtered.map((p) => {
         const subLabel = getSubLabel(p.cat, p.sub);
         const imgs = (p.images && p.images.length) ? p.images : ['https://images.unsplash.com/photo-1519225421980-715cb0215aed?w=600&q=80'];
-        return `<article class="product-card" style="animation-delay:${(idx % 6) * 0.4}s" data-id="${p.id}">
+        return `<article class="product-card" data-id="${p.id}">
           <div class="product-img-wrap" onclick="cycleImage(event,${p.id})">
             ${imgs.map((src,i)=>`<img class="product-img ${i===0?'':'hidden'}" src="${src}" alt="${p.name}" loading="lazy"/>`).join('')}
-            <div class="img-particles" id="particles-${p.id}"></div>
             <div class="pips">${imgs.map((_,i)=>`<span class="pip ${i===0?'active':''}"></span>`).join('')}</div>
             <span class="tap-hint">اضغطي للتبديل</span>
           </div>
@@ -1372,24 +1504,6 @@
           openDetail(+card.dataset.id);
         });
       });
-      filtered.forEach(p => startImageParticles(p.id));
-    }
-
-    function startImageParticles(id) {
-      const c = document.getElementById('particles-'+id);
-      if (!c) return; c.innerHTML='';
-      for (let i=0;i<9;i++) {
-        const p=document.createElement('div'); p.className='img-particle';
-        const size = 4 + Math.random() * 5;
-        p.style.width = size + 'px';
-        p.style.height = size + 'px';
-        p.style.left = (10 + Math.random() * 80) + '%';
-        p.style.animationDelay = (Math.random() * 3.5) + 's';
-        p.style.animationDuration = (2.8 + Math.random() * 2.8) + 's';
-        const drift = (Math.random() - 0.5) * 28;
-        p.style.setProperty('--drift', drift + 'px');
-        c.appendChild(p);
-      }
     }
 
     function cycleImage(e, id) {
@@ -1604,19 +1718,77 @@
         }))
       };
 
-      ORDERS.unshift(order);
-      saveLocal();
-      // try supabase (optional)
-      sbInsertOrder(order).catch(() => {});
-
-      showToast('تم تأكيد طلبكِ بنجاح 💕 رقم: ' + order.id);
-      cart = [];
-      updateCartUI();
-      closeCart();
-      // clear form
-      ['coName','coPhone','coAddress'].forEach(id => {
-        const el = document.getElementById(id); if (el) el.value = '';
+      // Open the WhatsApp tab synchronously from the checkout click to reduce popup-blocking.
+      const waWindow = ADMIN_WA_PHONE ? window.open('about:blank', '_blank') : null;
+      sbInsertOrder(order).then(ok => {
+        if (ok) {
+          ORDERS.unshift(order);
+          if (ADMIN_WA_PHONE) {
+            const message = buildCustomerOrderMessage(order);
+            const waUrl = 'https://wa.me/' + encodeURIComponent(ADMIN_WA_PHONE) + '?text=' + encodeURIComponent(message);
+            if (waWindow) { waWindow.location.href = waUrl; }
+            else { showToast('تم حفظ الطلب؛ اسمحي بالنوافذ المنبثقة لفتح واتساب أو افتحيه يدويًا.'); }
+          } else if (waWindow) { waWindow.close(); }
+          if (!ADMIN_WA_PHONE) showToast('تم حفظ الطلب، لكن لم يتم تحديد رقم واتساب الإدارة من الإعدادات.');
+          showToast('تم تأكيد طلبكِ بنجاح 💕 رقم: ' + order.id);
+          cart = [];
+          updateCartUI();
+          closeCart();
+          ['coName','coPhone','coAddress'].forEach(id => {
+            const el = document.getElementById(id); if (el) el.value = '';
+          });
+        } else {
+          showToast('تعذر حفظ الطلب على السحابة. تحققي من الاتصال وحاولي مجدداً');
+        }
       });
+    }
+
+    function buildCustomerOrderMessage(order) {
+      const lines = (order.items || []).map((it, index) => `${index + 1}. ${it.name} × ${it.qty} — ${(Number(it.price || 0) * Number(it.qty || 0)).toLocaleString('fr-FR')} دج`);
+      return `السلام عليكم، أريد تسجيل طلبي لدى MyPassion Deco.\n\nرقم الطلب: ${order.id}\nالاسم: ${order.customerName}\nالهاتف: ${order.phone}\nالمنتجات:\n${lines.join('\n')}\n\nالمجموع: ${Number(order.subtotal || 0).toLocaleString('fr-FR')} دج\nالتوصيل: ${Number(order.deliveryFee || 0).toLocaleString('fr-FR')} دج (${order.deliveryType === 'office' ? 'مكتبي' : 'منزلي'})\nالإجمالي: ${Number(order.total || 0).toLocaleString('fr-FR')} دج\nتاريخ المناسبة: ${order.eventDate}\nالولاية: ${order.wilayaName}\nالعنوان: ${order.address || 'غير محدد'}\n\nيرجى تأكيد استلام طلبي.`;
+    }
+
+    function buildAdminConfirmationMessage(order) {
+      const lines = (order.items || []).map((it, index) => `${index + 1}. ${it.name} × ${it.qty} — ${(Number(it.price || 0) * Number(it.qty || 0)).toLocaleString('fr-FR')} دج`);
+      return `السلام عليكم ${order.customerName}، معكِ MyPassion Deco بخصوص طلبك رقم ${order.id}.\n\nتفاصيل طلبك:\n${lines.join('\n')}\n\nسعر المنتجات: ${Number(order.subtotal || 0).toLocaleString('fr-FR')} دج\nالتوصيل: ${Number(order.deliveryFee || 0).toLocaleString('fr-FR')} دج (${order.deliveryType === 'office' ? 'مكتبي' : 'منزلي'})\nالإجمالي المطلوب: ${Number(order.total || 0).toLocaleString('fr-FR')} دج\nتاريخ المناسبة: ${order.eventDate}\nالولاية: ${order.wilayaName}\nالعنوان: ${order.address || 'غير محدد'}\n\nهل تؤكدين طلبك؟ يرجى الرد بـ «نعم» لتأكيد الطلب، أو مراسلتنا إذا أردتِ تعديل أي تفصيل. شكرًا لثقتكِ بنا.`;
+    }
+
+    function openWhatsAppForOrder(id) {
+      const order = ORDERS.find(o => String(o.id) === String(id));
+      if (!order) { showToast('لم يتم العثور على الطلب'); return; }
+      const phone = normalizeWhatsAppPhone(order.phone);
+      if (!phone) { showToast('رقم هاتف الزبونة غير صالح'); return; }
+      const url = 'https://wa.me/' + encodeURIComponent(phone) + '?text=' + encodeURIComponent(buildAdminConfirmationMessage(order));
+      window.open(url, '_blank', 'noopener');
+    }
+
+    function selectVisibleOrders(select) {
+      document.querySelectorAll('#ordersContainer .order-select').forEach(el => { el.checked = !!select; });
+      const status = document.getElementById('bulkWhatsAppStatus');
+      if (status) status.textContent = select ? 'تم تحديد الطلبات الظاهرة.' : 'تم إلغاء تحديد الطلبات الظاهرة.';
+    }
+
+    function startBulkWhatsApp() {
+      const ids = Array.from(document.querySelectorAll('#ordersContainer .order-select:checked')).map(el => el.value);
+      if (!ids.length) { showToast('حددي طلبًا واحدًا على الأقل أولًا'); return; }
+      bulkWhatsAppQueue = ids.filter(id => ORDERS.some(o => String(o.id) === String(id)));
+      bulkWhatsAppIndex = 0;
+      sendNextBulkWhatsApp();
+    }
+
+    function sendNextBulkWhatsApp() {
+      const status = document.getElementById('bulkWhatsAppStatus');
+      const nextBtn = document.getElementById('nextBulkWhatsAppBtn');
+      if (bulkWhatsAppIndex >= bulkWhatsAppQueue.length) {
+        if (status) status.textContent = 'انتهت قائمة الرسائل. يجب ضغط إرسال داخل واتساب لكل محادثة.';
+        if (nextBtn) nextBtn.style.display = 'none';
+        bulkWhatsAppQueue = []; bulkWhatsAppIndex = 0;
+        return;
+      }
+      const id = bulkWhatsAppQueue[bulkWhatsAppIndex++];
+      openWhatsAppForOrder(id);
+      if (status) status.textContent = `تم فتح ${bulkWhatsAppIndex} من ${bulkWhatsAppQueue.length} محادثة. أرسلي الرسالة داخل واتساب ثم اضغطي «فتح الرسالة التالية».`;
+      if (nextBtn) nextBtn.style.display = bulkWhatsAppIndex < bulkWhatsAppQueue.length ? 'inline-flex' : 'none';
     }
 
     async function sbInsertOrder(order) {
@@ -1637,8 +1809,8 @@
           status: order.status,
           items: order.items
         };
-        const res = await sbFetch('/orders', { method: 'POST', body: JSON.stringify(body) });
-        return res.ok;
+        const res = await sbFetchRetry('/orders', { method: 'POST', body: JSON.stringify(body) }, 2);
+        return !!(res && res.ok);
       } catch (e) { return false; }
     }
 
@@ -1683,9 +1855,10 @@
         const delLabel = o.deliveryType === 'office' ? 'مكتبي' : 'منزلي';
         return '<div class="stat-card" style="margin-bottom:.9rem;text-align:right">' +
           '<div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:.5rem;margin-bottom:.6rem">' +
-            '<div><strong style="color:var(--rose-gold);font-size:1rem">' + o.id + '</strong>' +
+            '<div style="display:flex;align-items:center;gap:.45rem;flex-wrap:wrap"><input class="order-select" type="checkbox" value="' + String(o.id).replace(/"/g, '&quot;') + '" aria-label="تحديد الطلب ' + o.id + '" style="width:18px;height:18px"><strong style="color:var(--rose-gold);font-size:1rem">' + o.id + '</strong>' +
             ' <span style="font-size:.78rem;background:rgba(122,62,50,.25);padding:.15rem .5rem;border-radius:8px;margin-right:.4rem">' + (o.status||'جديد') + '</span></div>' +
-            '<button class="admin-btn admin-btn-danger admin-btn-sm" onclick="deleteOrder(\'' + o.id + '\')">حذف</button>' +
+            '<div style="display:flex;gap:.4rem;flex-wrap:wrap"><button class="admin-btn admin-btn-sm" style="background:#187c55;color:white" onclick="openWhatsAppForOrder(\'' + String(o.id).replace(/\\/g, '\\\\').replace(/'/g, "\\'") + '\')">رسالة واتساب</button>' +
+            '<button class="admin-btn admin-btn-danger admin-btn-sm" onclick="deleteOrder(\'' + String(o.id).replace(/\\/g, '\\\\').replace(/'/g, "\\'") + '\')">حذف</button></div>' +
           '</div>' +
           '<div style="display:grid;grid-template-columns:1fr 1fr;gap:.4rem .8rem;font-size:.88rem;margin-bottom:.7rem">' +
             '<div><span style="color:rgba(245,237,232,.5);font-size:.75rem">العميلة</span><br>' + o.customerName + '</div>' +
@@ -1726,9 +1899,9 @@
 
     async function deleteOrder(id) {
       if (!confirm('حذف الطلب ' + id + '؟')) return;
+      const ok = await sbDeleteOrder(id);
+      if (!ok) { showToast('تعذر حذف الطلب من Supabase'); return; }
       ORDERS = ORDERS.filter(o => o.id !== id);
-      saveLocal();
-      await sbDeleteOrder(id);
       renderAdminOrders();
       updateDash();
       showToast('تم حذف الطلب');
@@ -1907,7 +2080,7 @@
       const cat = document.getElementById('pfCat').value;
       const sub = document.getElementById('pfSub').value;
       const desc = document.getElementById('pfDesc').value.trim();
-      let images = document.getElementById('pfImages').value.split(',').map(s => s.trim()).filter(Boolean);
+      let images = document.getElementById('pfImages').value.split(/\n|,/).map(s => s.trim()).filter(Boolean);
       const fileInput = document.getElementById('pfFiles');
       const files = fileInput ? [...fileInput.files] : [];
       if (!name || !price) { err.textContent = 'أدخلي الاسم والسعر'; return; }
@@ -1919,40 +2092,41 @@
         if (idVal) {
           const id = +idVal;
           const idx = PRODUCTS.findIndex(p => p.id === id);
-          if (idx >= 0) {
-            const updated = { ...PRODUCTS[idx], name, price, cat, sub, desc, images: images.length ? images : PRODUCTS[idx].images };
-            PRODUCTS[idx] = updated;
-            if (useSupabase) await sbUpdateProduct(id, updated);
-          }
+          if (idx < 0) { err.textContent = 'المنتج غير موجود'; return; }
+          const updated = { ...PRODUCTS[idx], name, price, cat, sub, desc, images: images.length ? normalizeImageUrls(images) : normalizeImageUrls(PRODUCTS[idx].images) };
+          const ok = await sbUpdateProduct(id, updated);
+          if (!ok) { err.textContent = 'فشل الحفظ على Supabase — تحققي من الاتصال وسياسات الكتابة'; return; }
+          PRODUCTS[idx] = updated;
         } else {
-          const p = { id: nextId++, name, price, cat, sub, desc, images };
-          if (useSupabase) {
-            const row = await sbInsertProduct(p);
-            if (row) p.id = row.id;
+          const p = { name, price, cat, sub, desc, images: normalizeImageUrls(images) };
+          const row = await sbInsertProduct(p);
+          if (!row || row.id == null) {
+            err.textContent = 'فشل إضافة المنتج على Supabase — تحققي من الاتصال وسياسات الكتابة (RLS)';
+            return;
           }
+          p.id = row.id;
           PRODUCTS.push(p);
         }
-        saveLocal();
         cancelProductForm();
         refreshAdminList();
         renderProducts();
         updateDash();
         err.className = 'admin-ok';
-        err.textContent = 'تم الحفظ ✓';
+        err.textContent = 'تم الحفظ على Supabase ✓';
       } catch (ex) {
-        err.textContent = ex.message || 'فشل الحفظ';
+        err.textContent = ex.message || 'فشل الحفظ على Supabase';
       }
     }
 
     async function deleteProduct(id) {
       if (!confirm('حذف هذا المنتج؟')) return;
+      const ok = await sbDeleteProduct(id);
+      if (!ok) { showToast('تعذر الحذف من Supabase'); return; }
       PRODUCTS = PRODUCTS.filter(p => p.id !== id);
-      if (useSupabase) await sbDeleteProduct(id);
-      saveLocal();
       refreshAdminList();
       renderProducts();
       updateDash();
-      showToast('تم الحذف');
+      showToast('تم الحذف من Supabase');
     }
 
     function renderAdminSubs() {
@@ -1996,27 +2170,27 @@
       if (!slug) slug = 'sub_' + Date.now();
       if (!SUBCATS[parent]) SUBCATS[parent] = [];
       if (SUBCATS[parent].some(s => s.id === slug)) { showToast('المعرّف موجود'); return; }
+      const ok = await sbInsertSub({ id: slug, parent, label });
+      if (!ok) { showToast('فشل حفظ التصنيف على Supabase'); return; }
       SUBCATS[parent].push({ id: slug, label });
-      if (useSupabase) await sbInsertSub({ id: slug, parent, label });
-      saveLocal();
       document.getElementById('sfLabel').value = '';
       document.getElementById('sfSlug').value = '';
       renderAdminSubs();
       renderSubcats();
       fillSubSelect();
       updateDash();
-      showToast('تمت إضافة التصنيف');
+      showToast('تمت إضافة التصنيف على Supabase');
     }
 
     async function deleteSub(parent, id) {
       if (!confirm('حذف هذا التصنيف؟')) return;
-      SUBCATS[parent] = SUBCATS[parent].filter(s => s.id !== id);
-      if (useSupabase) await sbDeleteSub(id);
-      saveLocal();
+      const ok = await sbDeleteSub(id);
+      if (!ok) { showToast('تعذر الحذف من Supabase'); return; }
+      SUBCATS[parent] = (SUBCATS[parent] || []).filter(s => s.id !== id);
       renderAdminSubs();
       renderSubcats();
       updateDash();
-      showToast('تم الحذف');
+      showToast('تم الحذف من Supabase');
     }
 
     // ========== STORE APPEARANCE SETTINGS ==========
@@ -2121,6 +2295,10 @@
 
     // wire admin UI once DOM ready
     function wireAdminUI() {
+      const saveWaBtn = document.getElementById('saveWhatsAppPhoneBtn');
+      if (saveWaBtn) saveWaBtn.onclick = saveWhatsAppSetting;
+      const reloadWaBtn = document.getElementById('reloadWhatsAppPhoneBtn');
+      if (reloadWaBtn) reloadWaBtn.onclick = loadWhatsAppSetting;
       const openBtn = document.getElementById('adminOpen');
       if (openBtn) openBtn.onclick = openAdmin;
       const closeBtn = document.getElementById('adminClose');
@@ -2183,17 +2361,29 @@
 
     function initCatIndicator() { /* icon cards — no sliding indicator */ }
 
-    // INIT
-    loadLocal();
-    // strip any leftover kahf products
-    PRODUCTS = []; // تفريغ المنتجات لإضافتها من الإدارة
-    saveLocal();
-    if (SUBCATS.favors) SUBCATS.favors = SUBCATS.favors.filter(s => s.id !== 'kahf');
-    nextId = Math.max(100, ...PRODUCTS.map(p=>p.id||0)) + 1;
+    // INIT — المصدر الوحيد: Supabase
+    PRODUCTS = [];
+    SUBCATS = JSON.parse(JSON.stringify(DEFAULT_SUBS));
+    ORDERS = [];
     createSparkles();
     initCatIndicator();
     renderProducts();
-    checkSupabase().then(()=>updateDash());
+    checkSupabase().then((ok) => {
+      updateDash();
+      renderProducts();
+      if (!ok) {
+        setTimeout(() => {
+          checkSupabase().then(() => { updateDash(); renderProducts(); });
+        }, 2500);
+      }
+    });
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') {
+        loadFromSupabase(true).then(() => {
+          loadOrdersFromSupabase().then(() => { updateDash(); renderProducts(); });
+        });
+      }
+    });
     window.addEventListener('resize', () => {});
   </script>
 </body>
